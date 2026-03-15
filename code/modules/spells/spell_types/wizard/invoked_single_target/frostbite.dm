@@ -23,7 +23,7 @@
 	human_req = TRUE // Combat spell
 	var/delay = 5
 	var/damage = 60
-	var/area_of_effect = 0
+	var/area_of_effect = 1
 
 
 /obj/effect/temp_visual/trapice
