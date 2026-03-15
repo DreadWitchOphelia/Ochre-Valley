@@ -1,17 +1,15 @@
 // Spell is disabled because of snap freeze + frost bolt existing at the same time
 /obj/effect/proc_holder/spell/invoked/frostbite
 	name = "Frostbite"
-	desc = "Freeze your enemy with an icy blast that does low damage, but reduces the target's Speed for a considerable length of time."
-	overlay_state = "null"
-	releasedrain = 50
-	chargetime = 8
-	recharge_time = 25 SECONDS
+	desc = "Freeze your enemy with an icy blast that does delayed damage and reduces the target's Speed for a considerable length of time."
+	overlay_state = "snap_freeze" // Need a new spell icon!
+	releasedrain = 30
+	chargetime = 10
+	recharge_time = 20 SECONDS
 	range = 7
 	warnie = "spellwarning"
 	movement_interrupt = FALSE
-	no_early_release = FALSE
-	chargedloop = null
-	sound = 'sound/magic/whiteflame.ogg'
+	no_early_release = TRUE
 	chargedloop = /datum/looping_sound/invokegen
 	gesture_required = TRUE
 	associated_skill = /datum/skill/magic/arcane
@@ -19,14 +17,81 @@
 	invocations = list("Congelationis!")
 	invocation_type = "shout"
 	glow_color = GLOW_COLOR_ICE
-	glow_intensity = GLOW_INTENSITY_LOW
+	glow_intensity = GLOW_INTENSITY_HIGH
 	cost = 3
 	gesture_required = TRUE // Offensive spell
 	human_req = TRUE // Combat spell
+	var/delay = 5
+	var/damage = 60
+	var/area_of_effect = 0
 
-/obj/effect/proc_holder/spell/invoked/frostbite/cast(list/targets, mob/living/user)
-	if(isliving(targets[1]))
-		var/mob/living/carbon/target = targets[1]
-		target.apply_status_effect(/datum/status_effect/buff/frostbite/) //apply debuff
-		target.adjustFireLoss(12) //damage
-		target.adjustBruteLoss(12)
+
+/obj/effect/temp_visual/trapice
+	icon = 'icons/effects/effects.dmi'
+	icon_state = "frost"
+	light_outer_range = 2
+	light_color = "#4cadee"
+	duration = 11
+	layer = MASSIVE_OBJ_LAYER
+
+/obj/effect/temp_visual/snap_freeze
+	icon = 'icons/effects/effects.dmi'
+	icon_state = "shieldsparkles"
+	name = "rippeling arcyne ice"
+	desc = "Get out of the way!"
+	randomdir = FALSE
+	duration = 1 SECONDS
+	layer = MASSIVE_OBJ_LAYER
+
+
+/obj/effect/proc_holder/spell/invoked/snap_freeze/cast(list/targets, mob/user)
+	var/turf/T = get_turf(targets[1])
+
+	var/turf/source_turf = get_turf(user)
+	if(T.z > user.z)
+		source_turf = get_step_multiz(source_turf, UP)
+	if(T.z < user.z)
+		source_turf = get_step_multiz(source_turf, DOWN)
+
+	for(var/turf/affected_turf in get_hear(area_of_effect, T))
+		if(!(affected_turf in get_hear(range, source_turf)))
+			continue
+		new /obj/effect/temp_visual/trapice(affected_turf)
+	playsound(T, 'sound/combat/wooshes/blunt/wooshhuge (2).ogg', 80, TRUE, soundping = TRUE) 
+
+	sleep(delay)
+	var/play_cleave = FALSE
+
+	for(var/turf/affected_turf in get_hear(area_of_effect, T))
+		new /obj/effect/temp_visual/snap_freeze(affected_turf)
+		if(!(affected_turf in get_hear(range, source_turf)))
+			continue
+		for(var/mob/living/L in affected_turf.contents)
+			if(L.anti_magic_check())
+				L.visible_message(span_warning("The ice fades away around [L]!"))
+				playsound(get_turf(L), 'sound/magic/magic_nulled.ogg', 100)
+				continue
+			if(spell_guard_check(L, TRUE))
+				L.visible_message(span_warning("[L] endures the freezing blast!"))
+				continue
+			play_cleave = TRUE
+			if(ishuman(L))
+				L.adjustFireLoss(damage)
+			else
+				L.adjustFireLoss(damage + 20)
+			if(L.has_status_effect(/datum/status_effect/buff/frostbite))
+				return
+			else
+				if(L.has_status_effect(/datum/status_effect/buff/frost))
+					playsound(T, 'sound/combat/fracture/fracturedry (1).ogg', 80, TRUE, soundping = TRUE)
+					L.remove_status_effect(/datum/status_effect/buff/frost)
+					L.apply_status_effect(/datum/status_effect/buff/frostbite)
+				else
+					L.apply_status_effect(/datum/status_effect/buff/frost)
+			playsound(affected_turf, "genslash", 80, TRUE)
+			to_chat(L, "<span class='userdanger'>The air chills your bones!</span>")
+
+	if(play_cleave)
+		playsound(T, 'sound/combat/newstuck.ogg', 80, TRUE, soundping = TRUE) 
+
+	return TRUE
